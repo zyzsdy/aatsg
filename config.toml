@@ -1,0 +1,52 @@
+[model]
+model_name = "large-v3"
+device = "cuda"
+device_index = 0
+compute_type = "float32"
+cpu_threads = 4
+download_root = ""
+local_files_only = true
+fix_v3_mel_filters = true
+
+[vad]
+enable_vad = false
+threshold = 0.2
+min_speech_duration_ms = 200
+min_silence_duration_ms = 2000
+max_speech_duration_s = 1800
+speech_pad_ms = 800
+
+[transcribe]
+language = "ja"
+beam_size = 5
+best_of = 5
+patience = 1.0
+length_penalty = 2.0
+repetition_penalty = 1.0
+no_repeat_ngram_size = 0
+temperature = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+compression_ratio_threshold = 2.2
+log_prob_threshold = -10
+no_speech_threshold = 0.75
+condition_on_previous_text = false
+prompt_reset_on_temperature = 0.5
+initial_prompt = ""
+prefix = ""
+suppress_blank = true
+suppress_tokens = [-1]
+without_timestamps = false
+max_initial_timestamp = 1.0
+word_timestamps = false
+prepend_punctuations = "\"'“¿([{-"
+append_punctuations = "\"'.。,，!！?？:：”)]}、"
+max_new_tokens = 448
+chunk_length = 30
+clip_timestamps = "0"
+hallucination_silence_threshold = 0.5
+hotwords = ""
+language_detection_threshold = 0.5
+language_detection_segments = 1
+
+[stream]
+buffer_trimming_time_s = 15
+buffer_time_offset = 0
