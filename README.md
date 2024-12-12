@@ -10,12 +10,25 @@ Automatic Audio Transcription and Subtitle Generator
 
 ### 环境初始化
 
+使用环境：
+
+* Python 3.10.9
+* CUDA 12.4
+
+如果你不是这个环境，你可能需要根据情况修改requirements.txt中的版本号。
+
 在使用之前，请先初始化Python环境并进入虚拟环境：
 
 ```bash
 python -m venv venv
 source venv/bin/activate  # 对于Windows用户，使用 `venv\Scripts\activate.bat`
 pip install -r requirements.txt
+```
+
+之后每次使用之前都需要先启动虚拟环境：
+
+```bash
+source venv/bin/activate  # 对于Windows用户，使用 `venv\Scripts\activate.bat`
 ```
 
 ### 语音识别
@@ -42,7 +55,7 @@ python asstrans.py <ass_file>
 
 在第一次使用之前，请修改`openaiconfig.py`中的`apikey`。
 
-翻译模型的参数配置在`config.toml`中。
+Whisper模型的参数配置在`config.toml`中。
 
 ## 注意事项
 
