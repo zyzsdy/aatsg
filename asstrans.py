@@ -37,13 +37,13 @@ def parse_ass_file(file_path):
     return dialogues
 
 def send_trans_api(transbag):
-    orig_yaml = [{'id': i + 1, 'text': t['text']} for i, t in enumerate(transbag)]
-    orig_yaml_string = yaml.dump(orig_yaml, allow_unicode=True, default_style=None, default_flow_style=False)
+    orig_json = [{'id': i + 1, 'text': t['text']} for i, t in enumerate(transbag)]
+    orig_json_string = json.dumps(orig_json, indent=4, separators=(', ', ': '))
 
     conf = openaiconfig.OpenAIConfig()
 
     user_prompt = conf.multiple_prompt
-    user_prompt = user_prompt.replace("{{yaml}}", orig_yaml_string)
+    user_prompt = user_prompt.replace("{{json}}", orig_json_string)
     user_prompt = user_prompt.replace("{{user_dict}}", conf.user_dict)
 
 
@@ -65,25 +65,100 @@ def send_trans_api(transbag):
             }
         ]
     }
+    if conf.use_stream:
+        data['stream'] = True
+    else:
+        data['stream'] = False
+
+    if conf.use_json_schema:
+        data['response_format'] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "translation",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "result": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "text": {
+                                        "type": "string"
+                                    }
+                                },
+                                "additionalProperties": False,
+                                "required": [
+                                    "id",
+                                    "text"
+                                ]
+                            }
+                        }
+                    },
+                    "additionalProperties": False,
+                    "required": [
+                        "result"
+                    ]
+                }
+            }
+        }
+    else:
+        data['response_format'] = {
+            "type": "json_object"
+        }
 
     for i in range(3):
         succ = False
         try:
-            response = requests.post(conf.url, headers=headers, data=json.dumps(data, ensure_ascii=False).encode('utf-8'))
-            response_json = response.json()
-    
-            translated_content = response_json['choices'][0]['message']['content']
+            if conf.use_stream:
+                with requests.post(conf.url, headers=headers, data=json.dumps(data, ensure_ascii=False).encode('utf-8'), stream=True) as response:
+                    if response.status_code != 200:
+                        print(f"Error: 翻译API请求失败：{response.status_code}")
+                        print(response.text)
+                        break
+
+                    assistant_message = ""
+                    for chunk in response.iter_lines():
+                        if chunk:
+                            decoded_chunk = chunk.decode('utf-8')
+                            if decoded_chunk.startswith("data: "):
+                                try:
+                                    chunk_data = json.loads(decoded_chunk[6:])
+
+                                    if 'choices' in chunk_data:
+                                        
+                                        choices_delta = chunk_data['choices'][0]['delta']
+                                        content = choices_delta.get('content', None)
+                                        if content:
+                                            assistant_message += content
+                                            print(content, end='', flush=True)
+                                except json.JSONDecodeError:
+                                    continue
+
+
+                    if assistant_message:
+                        response_json = assistant_message
+            else:
+                response = requests.post(conf.url, headers=headers, data=json.dumps(data, ensure_ascii=False).encode('utf-8'))
+                response_data = response.json()
+                response_json = response_data['choices'][0]['message']['content']
+                print(response_json)
+
         except Exception as e:
             print(f"Error: 翻译API请求失败：{e}")
+            print(response.text)
             continue
 
         try:
-            translated_content = re.sub(r'(?<=:)(\S)', r' \1', translated_content) # 大模型返回的结果有时候冒号后面没有空格，给他补上
-            translated_list = yaml.load(translated_content, Loader=yaml.FullLoader)
+            translated_obj = json.loads(response_json)
+            translated_list = translated_obj['result']
             succ = True
         except Exception as e:
             print(f"Error: 翻译结果解析失败：{e}")
-            print(translated_content)
+            print(response_json)
             continue
 
         break
@@ -104,7 +179,7 @@ def translate_ass(dialogues):
     for i, dialogue in enumerate(dialogues):
         bag.append(dialogue)
 
-        if len(bag) == 3:
+        if len(bag) == 10:
             print(f"正在发送翻译请求：Line {i} / {total_len}")
             trans_result = send_trans_api(bag)
             translated.extend(trans_result)
