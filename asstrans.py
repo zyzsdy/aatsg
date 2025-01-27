@@ -38,7 +38,7 @@ def parse_ass_file(file_path):
 
 def send_trans_api(transbag):
     orig_json = [{'id': i + 1, 'text': t['text']} for i, t in enumerate(transbag)]
-    orig_json_string = json.dumps(orig_json, indent=4, separators=(', ', ': '))
+    orig_json_string = json.dumps(orig_json, indent=4, ensure_ascii=False, separators=(', ', ': '))
 
     conf = openaiconfig.OpenAIConfig()
 
