@@ -1,10 +1,9 @@
 import sys
-import re
 import openaiconfig
 import requests
 import json
-import yaml
-from itertools import zip_longest
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import argparse
 
 def parse_ass_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -171,22 +170,44 @@ def send_trans_api(transbag):
     return transbag
 
 
-def translate_ass(dialogues):
-    translated = []
+def translate_ass(dialogues, max_workers=3):
+    translated = [{} for _ in range(len(dialogues))]  # 预分配结果数组
+    
+    def process_batch(batch_with_index):
+        batch, start_index = batch_with_index
+        result = send_trans_api(batch)
+        return (result, start_index)
 
-    bag = []
-    total_len = len(dialogues)
+    # 准备批次数据，每批10条
+    batches = []
+    batch = []
+    
     for i, dialogue in enumerate(dialogues):
-        bag.append(dialogue)
+        batch.append(dialogue)
+        if len(batch) == 10:
+            batches.append((batch.copy(), i - len(batch) + 1))
+            batch = []
 
-        if len(bag) == 10:
-            print(f"正在发送翻译请求：Line {i} / {total_len}")
-            trans_result = send_trans_api(bag)
-            translated.extend(trans_result)
-            bag = []
-        
-    if len(bag) > 0:
-        trans_result = send_trans_api(bag)
+    if batch:
+        batches.append((batch, len(dialogues) - len(batch)))
+
+    total_batches = len(batches)
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任务
+        future_to_batch = {executor.submit(process_batch, batch_data): batch_data 
+                         for batch_data in batches}
+
+        # 处理完成的任务
+        for future in as_completed(future_to_batch):
+            batch_result, start_index = future.result()
+            completed += 1
+            print(f"翻译进度：{completed}/{total_batches} 批次")
+            
+            # 将结果放入对应位置
+            for i, item in enumerate(batch_result):
+                translated[start_index + i] = item
 
     return translated
 
@@ -233,16 +254,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python asstrans.py <path_to_ass_file>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='ASS字幕翻译工具')
+    parser.add_argument('ass_file', help='输入的ASS文件路径')
+    parser.add_argument('--workers', type=int, default=10, help='并发翻译线程数（默认为10）')
+    args = parser.parse_args()
     
-    ass_file_path = sys.argv[1]
+    ass_file_path = args.ass_file
     target_file_path = ass_file_path.replace('.ass', '_translated.ass')
 
     dialogues = parse_ass_file(ass_file_path)
-    translated_result = translate_ass(dialogues)
+    translated_result = translate_ass(dialogues, args.workers)
     gen_ass(translated_result, target_file_path)
 
     print("ASS文件已经生成在：" + target_file_path)
-    
